@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Inland Multi Cuisine &amp; Stay logo placeholder">
+  <!-- LOGO PLACEHOLDER: replace this file with the official hotel logo (same name: logo.svg) -->
+  <circle cx="60" cy="60" r="56" fill="#141416" stroke="#C9A45C" stroke-width="2"/>
+  <circle cx="60" cy="60" r="49" fill="none" stroke="#C9A45C" stroke-opacity=".35" stroke-width="1"/>
+  <text x="60" y="71" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="34" letter-spacing="2" fill="#C9A45C">IM</text>
+  <path d="M38 82h44" stroke="#C9A45C" stroke-opacity=".6" stroke-width="1"/>
+</svg>
