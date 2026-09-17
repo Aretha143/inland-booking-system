@@ -1,0 +1,11 @@
+# Supabase CLI project config (for `supabase link` / `supabase functions deploy`)
+project_id = "inland-hotel-booking"
+
+[functions.gmail-oauth]
+verify_jwt = false
+
+[functions.send-booking-confirmation]
+verify_jwt = false
+
+[functions.admin-users]
+verify_jwt = false
