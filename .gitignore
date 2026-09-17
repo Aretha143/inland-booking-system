@@ -1,0 +1,8 @@
+.env
+.env.*
+*.pem
+*service-account*.json
+*credentials*.json
+.DS_Store
+node_modules/
+supabase/.temp/
