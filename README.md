@@ -16,7 +16,7 @@ Bookings are taken by staff over Instagram, Facebook, WhatsApp, phone or at the 
 | **Email** | **Gmail API** `users.messages.send` with OAuth 2.0 refresh token |
 | **Secrets** | Supabase Edge Function secrets + Supabase **Vault** (refresh token, encrypted at rest) |
 
-Features: dashboard, bookings list with search/filters, booking form with availability check, booking details with full email history, room availability calendar, room management, check-in / check-out, cancel, printable confirmation, staff management, admin settings, Gmail connection panel with test email, and email logs.
+Features: dashboard, bookings list with search/filters, booking form with availability check, **day-use (daycation) bookings**, booking details with full email history, room availability calendar, room management, check-in / check-out, cancel, printable confirmation, staff management, admin settings, Gmail connection panel with test email, and email logs.
 
 ### What is *not* in the repository (by design)
 
@@ -78,7 +78,7 @@ supabase/functions/admin-users/            staff management + first-admin setup
 
 ## 4. Database setup
 
-Open *SQL Editor → New query*, paste the whole of `supabase/migrations/001_schema.sql`, and run it. It creates:
+Open *SQL Editor → New query*, paste the whole of `supabase/migrations/001_schema.sql`, run it, then do the same with `supabase/migrations/002_day_use.sql`. Together they create:
 
 * `profiles`, `rooms`, `bookings`, `email_logs`, `settings`, `gmail_connection`, `oauth_states`, `booking_counters`
 * indexes (dates, statuses, room, plus trigram indexes for search)
@@ -86,24 +86,61 @@ Open *SQL Editor → New query*, paste the whole of `supabase/migrations/001_sch
 * **`remaining_amount`** as a generated column (`total_amount - advance_paid`)
 * **double-booking protection** (see below)
 * status-transition rules, audit fields (`created_by`, `checked_in_by`, …)
-* the 6 demo rooms (501, 502, 503, 601, 602, 701) and one clearly marked demo booking
+* `booking_type` (`OVERNIGHT` / `DAY_USE`), a per-room `day_use_price`, and hotel-wide default day-use hours in `settings`
+* the demo rooms and one clearly marked demo booking
 
 ### Double-booking protection
 
-Two layers, both in PostgreSQL:
+Two layers, both in PostgreSQL, and both work down to the minute so a daycation and an overnight
+stay can share a room on the same date:
 
 1. The `bookings_guard` trigger locks the room row (`SELECT … FOR UPDATE`) and then checks for an overlapping active booking, raising
-   `Room 501 is already booked for the selected dates.`
+   `Room 101 is already booked for the selected dates and times.`
 2. A GiST **exclusion constraint** `bookings_no_overlap` makes overlapping active bookings for the same room impossible even if a trigger were bypassed:
 
 ```sql
 exclude using gist (
   room_id with =,
-  daterange(check_in_date, check_out_date, '[)') with &&
+  tsrange(check_in_date + check_in_time, check_out_date + check_out_time, '[)') with &&
 ) where (booking_status in ('CONFIRMED','CHECKED-IN'))
 ```
 
-`'[)'` means the check-out day is free for the next guest. Cancelled and checked-out bookings never block a room.
+`'[)'` means the moment one guest leaves is free for the next. Cancelled and checked-out bookings never block a room.
+
+The browser also greys out rooms that are already taken, but that is only a convenience — the
+database is the single authority, and it is what rejects a clashing booking.
+
+---
+
+## 4b. Day use (daycation)
+
+A **day-use** booking is one where the guest arrives and leaves on the same day — no night stay.
+
+**How staff create one.** On *New Booking*, switch the toggle at the top of **Stay & Room** from
+*Overnight Stay* to **Day Use (Daycation)**. The check-out date disappears (it is always the same
+day), the two time fields become **Arrival** and **Departure**, and they are pre-filled with the
+hotel's default day-use hours. Staff can change those times for each guest.
+
+| Setting | Where | Default |
+|---|---|---|
+| Default day-use hours | *Settings → Hotel Information* → **Day-use start / end time** | 12:00 PM – 6:00 PM |
+| Day-use rate per room | *Rooms → edit a room* → **Day-use rate** | 0 (= not offered) |
+
+The booking form suggests the room's day-use rate instead of the nightly rate, with a **use this**
+button. If a room has no day-use rate yet, the form says so and an admin can add one in *Rooms*.
+
+**Availability.** Because availability is time-based, all of these are handled correctly:
+
+* an overnight guest checking out at 10:00 AM and a daycation from 12:00 PM — **both allowed**, same room, same day;
+* two daycations in the same room with overlapping hours — **blocked**;
+* a daycation from 7:00 PM after one that ends at 6:00 PM — **allowed**;
+* a daycation in the middle of somebody's overnight stay — **blocked**.
+
+**Everywhere else.** Day-use bookings carry a purple *Day use* marker in the dashboard, the bookings
+list and the booking page; the bookings list has an **Overnight & day use** filter; the dashboard has
+a **Day use today** counter; the calendar draws them as a single rounded bar with a ☀ marker; and the
+confirmation email and the printed slip say *Day Use Confirmation* with **Arrival** and **Departure**
+times instead of check-in/check-out dates.
 
 ## 5. RLS setup
 
