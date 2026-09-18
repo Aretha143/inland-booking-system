@@ -3,7 +3,7 @@ import { CONFIG } from "../config.js";
 import { sb, getRooms, pgLike, BOOKING_LIST_COLUMNS } from "../api.js";
 import {
   html, render, icon, $, $$, todayNPT, fmtDate, fmtMoney, statusBadge, emailBadge, emptyState, loadingBlock,
-  debounce, options, BOOKING_STATUSES, EMAIL_STATUSES, BOOKING_SOURCES, friendlyError,
+  debounce, options, BOOKING_STATUSES, EMAIL_STATUSES, BOOKING_SOURCES, friendlyError, fmtTime, isDayUse, dayUseTag,
 } from "../ui.js";
 import { rowActions, bindRowActions } from "./booking-actions.js";
 
@@ -23,6 +23,7 @@ export default async function bookingsView({ el, query }) {
     email: query.email || "",
     type: query.type || "",
     source: query.source || "",
+    btype: query.btype || "",
     dateMode: query.dateMode || "stay",
     date: query.date || "",
     view: VIEWS[query.view] ? query.view : "",
@@ -44,6 +45,7 @@ export default async function bookingsView({ el, query }) {
         <label class="field sm"><span>Email</span><select id="email"><option value="">All email states</option>${options(EMAIL_STATUSES, f.email)}</select></label>
         <label class="field sm"><span>Room type</span><select id="type"><option value="">All room types</option>${options(roomTypes, f.type)}</select></label>
         <label class="field sm"><span>Source</span><select id="source"><option value="">All sources</option>${options(BOOKING_SOURCES, f.source)}</select></label>
+        <label class="field sm"><span>Booking type</span><select id="btype"><option value="">Overnight &amp; day use</option>${options(["OVERNIGHT", "DAY_USE"], f.btype, { OVERNIGHT: "Overnight stays", DAY_USE: "Day use (daycation)" })}</select></label>
         <label class="field sm"><span>Date filter</span><select id="dateMode">${options(["stay", "checkin", "checkout"], f.dateMode, { stay: "Staying on", checkin: "Check-in on", checkout: "Check-out on" })}</select></label>
         <label class="field sm"><span>&nbsp;</span><input id="date" type="date" value="${f.date}"></label>
         <button class="btn btn-ghost sm" id="clear">Clear filters</button>
@@ -58,14 +60,14 @@ export default async function bookingsView({ el, query }) {
     const next = { ...f, ...patch };
     if (!("page" in patch)) next.page = 1;
     const qs = new URLSearchParams();
-    for (const k of ["q", "status", "email", "type", "source", "view", "date"]) if (next[k]) qs.set(k, next[k]);
+    for (const k of ["q", "status", "email", "type", "source", "btype", "view", "date"]) if (next[k]) qs.set(k, next[k]);
     if (next.dateMode && next.dateMode !== "stay") qs.set("dateMode", next.dateMode);
     if (next.page > 1) qs.set("page", String(next.page));
     location.hash = `#/bookings${qs.toString() ? "?" + qs : ""}`;
   };
 
   $("#q").oninput = debounce((e) => setQuery({ q: e.target.value.trim() }), 400);
-  ["status", "email", "type", "source", "dateMode", "date"].forEach((id) => {
+  ["status", "email", "type", "source", "btype", "dateMode", "date"].forEach((id) => {
     $(`#${id}`).onchange = (e) => setQuery({ [id]: e.target.value });
   });
   $("#clear").onclick = () => { location.hash = "#/bookings"; };
@@ -83,10 +85,14 @@ export default async function bookingsView({ el, query }) {
     if (f.email) qb = qb.eq("email_status", f.email);
     if (f.type) qb = qb.eq("room_type", f.type);
     if (f.source) qb = qb.eq("booking_source", f.source);
+    if (f.btype) qb = qb.eq("booking_type", f.btype);
     if (f.date) {
       if (f.dateMode === "checkin") qb = qb.eq("check_in_date", f.date);
       else if (f.dateMode === "checkout") qb = qb.eq("check_out_date", f.date);
-      else qb = qb.lte("check_in_date", f.date).gt("check_out_date", f.date);
+      // "Staying on": an overnight guest occupies the room until the morning of check-out,
+      // a day-use guest only on the day itself.
+      else qb = qb.lte("check_in_date", f.date)
+        .or(`and(booking_type.eq.OVERNIGHT,check_out_date.gt.${f.date}),and(booking_type.eq.DAY_USE,check_out_date.eq.${f.date})`);
     }
     if (f.view === "checkins-today") qb = qb.eq("check_in_date", today).in("booking_status", ["CONFIRMED", "CHECKED-IN"]);
     if (f.view === "checkouts-today") qb = qb.eq("check_out_date", today).in("booking_status", ["CHECKED-IN", "CHECKED-OUT"]);
@@ -108,10 +114,10 @@ export default async function bookingsView({ el, query }) {
           <tbody>
             ${data.length ? data.map((b) => html`<tr>
               <td><a class="mono link" href="#/bookings/${b.id}">${b.booking_id}</a><small class="sub">${b.booking_source}</small></td>
-              <td><strong>${b.guest_name}</strong><small class="sub">${b.guest_email}</small></td>
+              <td><strong>${b.guest_name}</strong> ${dayUseTag(b)}<small class="sub">${b.guest_email}</small></td>
               <td>${b.room_number}<small class="sub">${b.room_type}</small></td>
-              <td>${fmtDate(b.check_in_date, { weekday: false })}</td>
-              <td>${fmtDate(b.check_out_date, { weekday: false })}</td>
+              <td>${fmtDate(b.check_in_date, { weekday: false })}<small class="sub">${fmtTime(b.check_in_time)}</small></td>
+              <td>${isDayUse(b) ? html`<span class="muted">same day</span>` : fmtDate(b.check_out_date, { weekday: false })}<small class="sub">${fmtTime(b.check_out_time)}</small></td>
               <td class="num">${fmtMoney(b.total_amount)}${Number(b.remaining_amount) > 0 ? html`<small class="sub">${fmtMoney(b.remaining_amount)} due</small>` : html`<small class="sub ok">paid</small>`}</td>
               <td>${statusBadge(b.booking_status)}</td>
               <td>${emailBadge(b.email_status)}</td>

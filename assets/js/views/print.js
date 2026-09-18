@@ -1,7 +1,7 @@
 // Printable booking confirmation (also "Save as PDF" from the browser print dialog).
 import { CONFIG } from "../config.js";
 import { sb, must, getSettings } from "../api.js";
-import { html, render, icon, $, fmtDate, fmtTime, fmtMoney, nightsBetween, fmtDateTime, statusLabel, toast } from "../ui.js";
+import { html, render, icon, $, fmtDate, fmtTime, fmtMoney, nightsBetween, fmtDateTime, statusLabel, toast, isDayUse } from "../ui.js";
 
 export default async function printView({ el, params, navigate }) {
   const [b, s] = await Promise.all([
@@ -9,6 +9,7 @@ export default async function printView({ el, params, navigate }) {
     getSettings(),
   ]);
   if (!b) { toast("Booking not found.", "error"); return navigate("/bookings", { replace: true }); }
+  const dayUse = isDayUse(b);
   const n = nightsBetween(b.check_in_date, b.check_out_date);
 
   render(el, html`
@@ -26,7 +27,7 @@ export default async function printView({ el, params, navigate }) {
           <small>${s.phone ? `Tel: ${s.phone} · ` : ""}${s.email || ""}</small>
         </div>
         <div class="sheet-meta">
-          <span class="sheet-title">Booking Confirmation</span>
+          <span class="sheet-title">${dayUse ? "Day Use Confirmation" : "Booking Confirmation"}</span>
           <span class="sheet-id">${b.booking_id}</span>
           <small>Status: ${statusLabel(b.booking_status)}</small>
           <small>Issued: ${fmtDateTime(new Date().toISOString())}</small>
@@ -34,9 +35,14 @@ export default async function printView({ el, params, navigate }) {
       </header>
 
       <section class="sheet-hero">
-        <div><small>Check-in</small><b>${fmtDate(b.check_in_date)}</b><span>${fmtTime(b.check_in_time)}</span></div>
-        <div><small>Nights</small><b>${n}</b><span>Room ${b.room_number}</span></div>
-        <div><small>Check-out</small><b>${fmtDate(b.check_out_date)}</b><span>${fmtTime(b.check_out_time)}</span></div>
+        ${dayUse ? html`
+          <div><small>Arrival</small><b>${fmtDate(b.check_in_date)}</b><span>${fmtTime(b.check_in_time)}</span></div>
+          <div><small>Day Use</small><b>Same day</b><span>Room ${b.room_number}</span></div>
+          <div><small>Departure</small><b>${fmtDate(b.check_out_date)}</b><span>${fmtTime(b.check_out_time)}</span></div>`
+        : html`
+          <div><small>Check-in</small><b>${fmtDate(b.check_in_date)}</b><span>${fmtTime(b.check_in_time)}</span></div>
+          <div><small>Nights</small><b>${n}</b><span>Room ${b.room_number}</span></div>
+          <div><small>Check-out</small><b>${fmtDate(b.check_out_date)}</b><span>${fmtTime(b.check_out_time)}</span></div>`}
       </section>
 
       <div class="sheet-cols">
@@ -56,8 +62,9 @@ export default async function printView({ el, params, navigate }) {
           <table class="sheet-table">
             <tr><th>Room number</th><td>${b.room_number}</td></tr>
             <tr><th>Room type</th><td>${b.room_type}</td></tr>
-            <tr><th>Check-in</th><td>${fmtDate(b.check_in_date)} · ${fmtTime(b.check_in_time)}</td></tr>
-            <tr><th>Check-out</th><td>${fmtDate(b.check_out_date)} · ${fmtTime(b.check_out_time)}</td></tr>
+            <tr><th>Booking type</th><td>${dayUse ? "Day Use (Daycation) — same-day arrival and departure" : "Overnight Stay"}</td></tr>
+            <tr><th>${dayUse ? "Arrival" : "Check-in"}</th><td>${fmtDate(b.check_in_date)} · ${fmtTime(b.check_in_time)}</td></tr>
+            <tr><th>${dayUse ? "Departure" : "Check-out"}</th><td>${fmtDate(b.check_out_date)} · ${fmtTime(b.check_out_time)}</td></tr>
             <tr><th>Booking source</th><td>${b.booking_source}</td></tr>
           </table>
         </section>
@@ -82,8 +89,12 @@ export default async function printView({ el, params, navigate }) {
           ${s.phone ? html`Phone: ${s.phone}<br>` : ""}${s.email || ""}
         </div>
         <div class="foot-times">
-          <span>Standard check-in <b>${fmtTime(s.check_in_time)}</b></span>
-          <span>Standard check-out <b>${fmtTime(s.check_out_time)}</b></span>
+          ${dayUse ? html`
+            <span>Day-use hours <b>${fmtTime(s.day_use_start_time || "12:00")} – ${fmtTime(s.day_use_end_time || "18:00")}</b></span>
+            <span>Times for this booking are shown above</span>`
+          : html`
+            <span>Standard check-in <b>${fmtTime(s.check_in_time)}</b></span>
+            <span>Standard check-out <b>${fmtTime(s.check_out_time)}</b></span>`}
         </div>
         <div class="sign"><span>Guest signature</span><span>Front office</span></div>
       </footer>

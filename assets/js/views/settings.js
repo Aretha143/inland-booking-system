@@ -52,6 +52,9 @@ async function hotelTab(body) {
         <label class="field"><span>Currency</span><input name="currency" maxlength="8" value="${s.currency ?? "NPR"}"></label>
         <label class="field"><span>Standard check-in time</span><input name="check_in_time" type="time" value="${timeInput(s.check_in_time)}"></label>
         <label class="field"><span>Standard check-out time</span><input name="check_out_time" type="time" value="${timeInput(s.check_out_time)}"></label>
+        <label class="field"><span>Day-use start time</span><input name="day_use_start_time" type="time" value="${timeInput(s.day_use_start_time) || "12:00"}"></label>
+        <label class="field"><span>Day-use end time</span><input name="day_use_end_time" type="time" value="${timeInput(s.day_use_end_time) || "18:00"}"></label>
+        <p class="hint span-2">Day-use (daycation) bookings start with these hours. Staff can change the arrival and departure times for each guest.</p>
         <label class="field"><span>Data retention</span><select name="retention_policy">${options(["FOREVER", "24_MONTHS", "12_MONTHS"], s.retention_policy ?? "FOREVER", { FOREVER: "Keep bookings forever (default)", "24_MONTHS": "24 months", "12_MONTHS": "12 months" })}</select>
           <small class="hint">Bookings are never deleted automatically. This setting records the hotel's policy for future use.</small></label>
         <div class="form-error span-2" hidden></div>
@@ -71,6 +74,7 @@ async function hotelTab(body) {
       must(await sb.from("settings").update({
         hotel_name: f.hotel_name.trim(), email: f.email.trim(), address: f.address.trim(), phone: f.phone.trim(),
         currency: f.currency.trim() || "NPR", check_in_time: f.check_in_time || "14:00", check_out_time: f.check_out_time || "10:00",
+        day_use_start_time: f.day_use_start_time || "12:00", day_use_end_time: f.day_use_end_time || "18:00",
         retention_policy: f.retention_policy,
       }).eq("id", 1).select("id").single());
       state.settings = null;

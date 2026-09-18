@@ -1,6 +1,6 @@
 // Room availability calendar: rooms × dates with booking bars.
 import { sb, must, getRooms } from "../api.js";
-import { html, render, icon, $, $$, todayNPT, addDays, fmtDate, fmtDateShort, nightsBetween, emptyState, statusLabel } from "../ui.js";
+import { html, render, icon, $, $$, todayNPT, addDays, fmtDate, fmtDateShort, fmtTime, nightsBetween, emptyState, statusLabel, isDayUse } from "../ui.js";
 
 const BAR_CLASS = { "CONFIRMED": "bar-confirmed", "CHECKED-IN": "bar-in", "CHECKED-OUT": "bar-out", "CANCELLED": "bar-cancelled" };
 
@@ -13,9 +13,12 @@ export default async function calendarView({ el, query }) {
 
   const rooms = await getRooms();
   const statuses = showCancelled ? ["CONFIRMED", "CHECKED-IN", "CHECKED-OUT", "CANCELLED"] : ["CONFIRMED", "CHECKED-IN", "CHECKED-OUT"];
+  // A day-use booking starts and ends on the same date, so it is fetched with gte and
+  // then filtered: an overnight stay that ended before this window is dropped.
   const bookings = must(await sb.from("bookings")
-    .select("id, booking_id, guest_name, room_id, check_in_date, check_out_date, booking_status, guest_count")
-    .in("booking_status", statuses).lt("check_in_date", end).gt("check_out_date", start).order("check_in_date"));
+    .select("id, booking_id, guest_name, room_id, booking_type, check_in_date, check_in_time, check_out_date, check_out_time, booking_status, guest_count")
+    .in("booking_status", statuses).lt("check_in_date", end).gte("check_out_date", start).order("check_in_date"))
+    .filter((b) => (isDayUse(b) ? b.check_out_date >= start : b.check_out_date > start));
 
   const dates = Array.from({ length: days }, (_, i) => addDays(start, i));
   const go = (patch) => {
@@ -30,7 +33,9 @@ export default async function calendarView({ el, query }) {
     const lanes = [];
     for (const b of list) {
       const s = b.check_in_date < start ? start : b.check_in_date;
-      const e = b.check_out_date > end ? end : b.check_out_date;
+      let e = b.check_out_date > end ? end : b.check_out_date;
+      // a day-use booking occupies exactly one column
+      if (e <= s) e = addDays(s, 1);
       let lane = lanes.findIndex((l) => l.every((x) => x.e <= s || x.s >= e));
       if (lane === -1) { lanes.push([]); lane = lanes.length - 1; }
       lanes[lane].push({ ...b, s, e, lane });
@@ -51,7 +56,7 @@ export default async function calendarView({ el, query }) {
 
     <div class="cal-legend">
       <span class="lg bar-confirmed">Confirmed</span><span class="lg bar-in">Checked-in</span>
-      <span class="lg bar-out">Checked-out</span>${showCancelled ? html`<span class="lg bar-cancelled">Cancelled</span>` : ""}
+      <span class="lg bar-out">Checked-out</span><span class="lg bar-day">☀ Day use</span>${showCancelled ? html`<span class="lg bar-cancelled">Cancelled</span>` : ""}
       <label class="check sm"><input type="checkbox" id="showCancelled" ${showCancelled ? "checked" : ""}><span>Show cancelled</span></label>
     </div>
 
@@ -72,10 +77,13 @@ export default async function calendarView({ el, query }) {
                 ${lanes.flat().map((b) => {
                   const col = nightsBetween(start, b.s) + 1;
                   const span = Math.max(1, nightsBetween(b.s, b.e));
-                  return html`<a class="cal-bar ${BAR_CLASS[b.booking_status]}" href="#/bookings/${b.id}"
+                  const day = isDayUse(b);
+                  return html`<a class="cal-bar ${BAR_CLASS[b.booking_status]} ${day ? "bar-day" : ""}" href="#/bookings/${b.id}"
                      style="grid-column:${col} / span ${span}; grid-row:${b.lane + 1}"
-                     title="${b.booking_id} · ${b.guest_name} · ${statusLabel(b.booking_status)} · ${fmtDate(b.check_in_date)} → ${fmtDate(b.check_out_date)}">
-                     <span>${b.guest_name}</span></a>`;
+                     title="${b.booking_id} · ${b.guest_name} · ${statusLabel(b.booking_status)} · ${day
+                       ? `Day use ${fmtDate(b.check_in_date)}, ${fmtTime(b.check_in_time)} → ${fmtTime(b.check_out_time)}`
+                       : `${fmtDate(b.check_in_date)} → ${fmtDate(b.check_out_date)}`}">
+                     <span>${day ? "☀ " : ""}${b.guest_name}</span></a>`;
                 })}
               </div>`;
           })}

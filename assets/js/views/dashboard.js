@@ -1,6 +1,6 @@
 // Dashboard: today's operations at a glance.
 import { sb, must, isAdmin, getGmailStatus, BOOKING_LIST_COLUMNS } from "../api.js";
-import { html, render, icon, $, todayNPT, fmtDate, fmtTime, fmtMoney, statusBadge, emailBadge, emptyState, loadingBlock } from "../ui.js";
+import { html, render, icon, $, todayNPT, fmtDate, fmtTime, fmtMoney, statusBadge, emailBadge, emptyState, loadingBlock, isDayUse, dayUseTag } from "../ui.js";
 import { rowActions, bindRowActions } from "./booking-actions.js";
 
 const card = (key, label, value, iconName, href) => html`
@@ -43,6 +43,7 @@ export default async function dashboardView({ el }) {
     <section class="stats">
       ${card("in", "Today’s check-ins", s.checkins_today ?? 0, "login", "#/bookings?view=checkins-today")}
       ${card("out", "Today’s check-outs", s.checkouts_today ?? 0, "exit", "#/bookings?view=checkouts-today")}
+      ${card("day", "Day use today", s.day_use_today ?? 0, "clock", "#/bookings?btype=DAY_USE&dateMode=checkin&date=" + today)}
       ${card("up", "Upcoming bookings", s.upcoming ?? 0, "upcoming", "#/bookings?view=upcoming")}
       ${card("guests", "Active guests", s.active_guests ?? 0, "guests", "#/bookings?status=CHECKED-IN")}
       ${card("cancel", "Cancelled", s.cancelled ?? 0, "cancel", "#/bookings?status=CANCELLED")}
@@ -59,7 +60,7 @@ export default async function dashboardView({ el }) {
         <div class="card-head"><h3>${icon("login")} Arriving today</h3><a class="link" href="#/bookings?view=checkins-today">View all</a></div>
         ${arrivals.length ? html`<ul class="mini-list">${arrivals.map((b) => html`
           <li><a href="#/bookings/${b.id}">
-            <span class="mini-main"><strong>${b.guest_name}</strong><small>Room ${b.room_number} · ${b.guest_count} guest${b.guest_count > 1 ? "s" : ""} · ${fmtTime(b.check_in_time)}</small></span>
+            <span class="mini-main"><strong>${b.guest_name}</strong> ${dayUseTag(b)}<small>Room ${b.room_number} · ${b.guest_count} guest${b.guest_count > 1 ? "s" : ""} · ${fmtTime(b.check_in_time)}${isDayUse(b) ? ` → ${fmtTime(b.check_out_time)} same day` : ""}</small></span>
             ${statusBadge(b.booking_status)}</a></li>`)}</ul>`
           : emptyState("No arrivals today")}
       </div>
@@ -81,10 +82,10 @@ export default async function dashboardView({ el }) {
           <tbody>
             ${recent.length ? recent.map((b) => html`<tr>
               <td><a class="mono link" href="#/bookings/${b.id}">${b.booking_id}</a></td>
-              <td><strong>${b.guest_name}</strong><small class="sub">${b.guest_email}</small></td>
+              <td><strong>${b.guest_name}</strong> ${dayUseTag(b)}<small class="sub">${b.guest_email}</small></td>
               <td>${b.room_number}<small class="sub">${b.room_type}</small></td>
-              <td>${fmtDate(b.check_in_date, { weekday: false })}</td>
-              <td>${fmtDate(b.check_out_date, { weekday: false })}</td>
+              <td>${fmtDate(b.check_in_date, { weekday: false })}<small class="sub">${fmtTime(b.check_in_time)}</small></td>
+              <td>${isDayUse(b) ? html`<span class="muted">same day</span>` : fmtDate(b.check_out_date, { weekday: false })}<small class="sub">${fmtTime(b.check_out_time)}</small></td>
               <td class="num">${fmtMoney(b.total_amount)}${Number(b.remaining_amount) > 0 ? html`<small class="sub">${fmtMoney(b.remaining_amount)} due</small>` : ""}</td>
               <td>${statusBadge(b.booking_status)}</td>
               <td>${emailBadge(b.email_status)}</td>

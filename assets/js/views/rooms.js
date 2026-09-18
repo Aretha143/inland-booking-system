@@ -12,6 +12,8 @@ const roomForm = (r = {}) => html`
     <label class="field"><span>Floor</span><input name="floor" type="number" min="0" max="99" value="${r.floor ?? ""}"></label>
     <label class="field"><span>Maximum guests</span><input name="max_guests" type="number" min="1" max="50" value="${r.max_guests ?? 2}"></label>
     <label class="field"><span>Price per night</span><input name="price" type="number" min="0" step="0.01" value="${r.price ?? 0}"></label>
+    <label class="field"><span>Day-use rate <small>(daycation, same-day)</small></span><input name="day_use_price" type="number" min="0" step="0.01" value="${r.day_use_price ?? 0}">
+      <small class="hint">Charged when the guest checks in and out on the same day. Leave 0 if this room is not offered for day use.</small></label>
     <label class="field"><span>Status</span><select name="status">${options(ROOM_STATUSES, r.status ?? "AVAILABLE")}</select></label>
   </div>
   <datalist id="roomTypes"><option>Luxury 1BHK</option><option>Luxury 2BHK</option><option>Premium Space</option></datalist>`;
@@ -27,7 +29,7 @@ export default async function roomsView({ el }) {
     const payload = {
       room_number: String(f.room_number).trim(), room_type: String(f.room_type).trim(),
       floor: f.floor === "" ? null : Number(f.floor), max_guests: Number(f.max_guests || 2),
-      price: Number(f.price || 0), status: f.status,
+      price: Number(f.price || 0), day_use_price: Number(f.day_use_price || 0), status: f.status,
     };
     must(id ? await sb.from("rooms").update(payload).eq("id", id).select("id").single()
             : await sb.from("rooms").insert(payload).select("id").single());
@@ -42,7 +44,7 @@ export default async function roomsView({ el }) {
 
     <section class="card">
       <div class="table-wrap"><table class="table">
-        <thead><tr><th>Room</th><th>Type</th><th>Floor</th><th class="num">Max guests</th><th class="num">Price / night</th><th>Status</th>${admin ? html`<th></th>` : ""}</tr></thead>
+        <thead><tr><th>Room</th><th>Type</th><th>Floor</th><th class="num">Max guests</th><th class="num">Price / night</th><th class="num">Day-use rate</th><th>Status</th>${admin ? html`<th></th>` : ""}</tr></thead>
         <tbody>
           ${rooms.length ? rooms.map((r) => html`<tr>
             <td><strong>${r.room_number}</strong></td>
@@ -50,11 +52,12 @@ export default async function roomsView({ el }) {
             <td>${r.floor ?? "—"}</td>
             <td class="num">${r.max_guests}</td>
             <td class="num">${fmtMoney(r.price)}</td>
+            <td class="num">${Number(r.day_use_price) > 0 ? fmtMoney(r.day_use_price) : html`<span class="muted-2">not offered</span>`}</td>
             <td>${roomBadge(r.status)}</td>
             ${admin ? html`<td class="row-actions nowrap">
               <button class="icon-btn" data-edit="${r.id}" title="Edit room ${r.room_number}">${icon("edit")}</button>
               <button class="icon-btn danger" data-del="${r.id}" title="Delete room ${r.room_number}">${icon("trash")}</button></td>` : ""}
-          </tr>`) : html`<tr><td colspan="7">${emptyState("No rooms yet", "Add the hotel's rooms to start taking bookings.")}</td></tr>`}
+          </tr>`) : html`<tr><td colspan="8">${emptyState("No rooms yet", "Add the hotel's rooms to start taking bookings.")}</td></tr>`}
         </tbody>
       </table></div>
     </section>`);

@@ -1,9 +1,22 @@
 // New / edit booking. "Save Booking" never sends email; "Save & Send Confirmation" does.
+// Supports two booking types: an overnight stay, and a day-use "daycation" where the
+// guest checks in and out on the same day.
 import { sb, must, getRooms, getSettings, sendConfirmation, state } from "../api.js";
 import {
   html, render, icon, $, $$, raw, toast, friendlyError, setBusy, todayNPT, addDays, nightsBetween, fmtMoney,
-  fmtDate, timeInput, options, EMAIL_RE, PAYMENT_METHODS, BOOKING_SOURCES, loadingBlock, confirmDialog,
+  fmtDate, fmtTime, timeInput, options, EMAIL_RE, PAYMENT_METHODS, BOOKING_SOURCES, loadingBlock, confirmDialog,
 } from "../ui.js";
+
+const stamp = (d, t) => `${d}T${(timeInput(t) || "00:00")}`;
+const hoursBetween = (a, b) => {
+  const [ah, am] = (timeInput(a) || "0:0").split(":").map(Number);
+  const [bh, bm] = (timeInput(b) || "0:0").split(":").map(Number);
+  return (bh * 60 + bm - ah * 60 - am) / 60;
+};
+const fmtHours = (h) => {
+  const whole = Math.floor(h), mins = Math.round((h - whole) * 60);
+  return `${whole} hour${whole === 1 ? "" : "s"}${mins ? ` ${mins} min` : ""}`;
+};
 
 export default async function bookingFormView({ el, params, query, navigate }) {
   const editing = Boolean(params.id);
@@ -18,13 +31,22 @@ export default async function bookingFormView({ el, params, query, navigate }) {
   const checkedIn = editing && booking.booking_status === "CHECKED-IN";
 
   const today = todayNPT();
+  const dayStart = timeInput(settings.day_use_start_time) || "12:00";
+  const dayEnd = timeInput(settings.day_use_end_time) || "18:00";
+  const startDate = query.date || today;
+  const wantsDayUse = query.type === "day" || query.type === "DAY_USE";
+
   const v = booking || {
     guest_name: "", guest_email: "", phone: "", guest_count: 2, nationality: "", id_passport: "",
-    room_id: query.room || "", check_in_date: query.date || today, check_in_time: timeInput(settings.check_in_time) || "14:00",
-    check_out_date: addDays(query.date || today, 1), check_out_time: timeInput(settings.check_out_time) || "10:00",
+    room_id: query.room || "", booking_type: wantsDayUse ? "DAY_USE" : "OVERNIGHT",
+    check_in_date: startDate,
+    check_in_time: wantsDayUse ? dayStart : (timeInput(settings.check_in_time) || "14:00"),
+    check_out_date: wantsDayUse ? startDate : addDays(startDate, 1),
+    check_out_time: wantsDayUse ? dayEnd : (timeInput(settings.check_out_time) || "10:00"),
     total_amount: "", advance_paid: 0, payment_method: "Cash", booking_source: "Instagram",
     special_requests: "", internal_notes: "",
   };
+  let bookingType = v.booking_type === "DAY_USE" ? "DAY_USE" : "OVERNIGHT";
   const roomTypes = [...new Set(rooms.map((r) => r.room_type))];
   const selectedRoom = rooms.find((r) => r.id === v.room_id);
 
@@ -56,14 +78,25 @@ export default async function bookingFormView({ el, params, query, navigate }) {
 
       <section class="card">
         <div class="card-head"><h3>${icon("rooms")} Stay &amp; Room</h3></div>
+
+        <div class="seg" id="typeToggle" role="radiogroup" aria-label="Booking type">
+          <button type="button" class="seg-btn ${bookingType === "OVERNIGHT" ? "is-on" : ""}" data-type="OVERNIGHT"
+            role="radio" aria-checked="${bookingType === "OVERNIGHT" ? "true" : "false"}" ${locked ? raw("disabled") : ""}>
+            ${icon("calendar")} Overnight Stay</button>
+          <button type="button" class="seg-btn ${bookingType === "DAY_USE" ? "is-on" : ""}" data-type="DAY_USE"
+            role="radio" aria-checked="${bookingType === "DAY_USE" ? "true" : "false"}" ${locked ? raw("disabled") : ""}>
+            ${icon("clock")} Day Use (Daycation)</button>
+        </div>
+        <p class="hint seg-hint" id="typeHint"></p>
+
         <div class="grid-2">
-          <label class="field"><span>Check-in date <b class="req">*</b></span><input name="check_in_date" type="date" required value="${v.check_in_date}" ${checkedIn || locked ? raw("disabled") : ""}></label>
-          <label class="field"><span>Check-in time</span><input name="check_in_time" type="time" value="${timeInput(v.check_in_time)}"></label>
-          <label class="field"><span>Check-out date <b class="req">*</b></span><input name="check_out_date" type="date" required value="${v.check_out_date}" ${locked ? raw("disabled") : ""}></label>
-          <label class="field"><span>Check-out time</span><input name="check_out_time" type="time" value="${timeInput(v.check_out_time)}"></label>
+          <label class="field"><span id="inDateLabel">Check-in date <b class="req">*</b></span><input name="check_in_date" type="date" required value="${v.check_in_date}" ${checkedIn || locked ? raw("disabled") : ""}></label>
+          <label class="field"><span id="inTimeLabel">Check-in time</span><input name="check_in_time" type="time" value="${timeInput(v.check_in_time)}"></label>
+          <label class="field" id="outDateField"><span>Check-out date <b class="req">*</b></span><input name="check_out_date" type="date" required value="${v.check_out_date}" ${locked ? raw("disabled") : ""}></label>
+          <label class="field"><span id="outTimeLabel">Check-out time</span><input name="check_out_time" type="time" value="${timeInput(v.check_out_time)}"></label>
           <label class="field"><span>Room type</span><select name="room_type_filter"><option value="">All room types</option>${options(roomTypes, selectedRoom?.room_type || "")}</select></label>
           <label class="field"><span>Room number <b class="req">*</b></span><select name="room_id" required ${locked ? raw("disabled") : ""}></select>
-            <small class="hint" id="roomHint">Rooms already booked for these dates are marked unavailable.</small></label>
+            <small class="hint" id="roomHint">Rooms already booked for these dates and times are marked unavailable.</small></label>
         </div>
         <div class="stay-summary" id="staySummary"></div>
       </section>
@@ -104,20 +137,62 @@ export default async function bookingFormView({ el, params, query, navigate }) {
   const form = $("#bookingForm", el);
   const errBox = $("#formError", el);
   const roomSelect = form.room_id;
+  const outDateField = $("#outDateField", el);
+  const isDayUse = () => bookingType === "DAY_USE";
   let unavailable = new Set();
 
   const fields = () => Object.fromEntries(new FormData(form).entries());
 
+  // ---- booking type ---------------------------------------------------------
+  function applyType({ resetTimes = false } = {}) {
+    const dayUse = isDayUse();
+    $$("#typeToggle .seg-btn", el).forEach((b) => {
+      const on = b.dataset.type === bookingType;
+      b.classList.toggle("is-on", on);
+      b.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    outDateField.hidden = dayUse;
+    form.check_out_date.disabled = dayUse || locked;
+    $("#inTimeLabel", el).textContent = dayUse ? "Arrival time" : "Check-in time";
+    $("#outTimeLabel", el).textContent = dayUse ? "Departure time" : "Check-out time";
+    $("#inDateLabel", el).innerHTML = dayUse ? 'Date <b class="req">*</b>' : 'Check-in date <b class="req">*</b>';
+    $("#typeHint", el).textContent = dayUse
+      ? `The guest arrives and leaves on the same day. Default hours are ${fmtTime(dayStart)} – ${fmtTime(dayEnd)}; change the times for this guest if needed.`
+      : "The guest stays at least one night.";
+    if (dayUse) {
+      form.check_out_date.value = form.check_in_date.value;
+      if (resetTimes) { form.check_in_time.value = dayStart; form.check_out_time.value = dayEnd; }
+    } else if (resetTimes) {
+      form.check_in_time.value = timeInput(settings.check_in_time) || "14:00";
+      form.check_out_time.value = timeInput(settings.check_out_time) || "10:00";
+      if (form.check_out_date.value <= form.check_in_date.value) form.check_out_date.value = addDays(form.check_in_date.value, 1);
+    }
+  }
+
+  $$("#typeToggle .seg-btn", el).forEach((b) => {
+    b.onclick = () => {
+      if (b.disabled || b.dataset.type === bookingType) return;
+      bookingType = b.dataset.type;
+      applyType({ resetTimes: true });
+      refreshAvailability();
+    };
+  });
+
+  // ---- availability (time-based, so day-use and overnight can share a date) ---
   async function refreshAvailability() {
     const inD = form.check_in_date.value || v.check_in_date;
-    const outD = form.check_out_date.value || v.check_out_date;
+    const outD = isDayUse() ? inD : (form.check_out_date.value || v.check_out_date);
     unavailable = new Set();
-    if (inD && outD && outD > inD) {
+    const start = stamp(inD, form.check_in_time.value), end = stamp(outD, form.check_out_time.value);
+    if (inD && outD && end > start) {
       try {
-        const rows = must(await sb.from("bookings").select("room_id, booking_id, guest_name")
+        const rows = must(await sb.from("bookings")
+          .select("room_id, booking_id, check_in_date, check_in_time, check_out_date, check_out_time")
           .in("booking_status", ["CONFIRMED", "CHECKED-IN"])
-          .lt("check_in_date", outD).gt("check_out_date", inD));
-        rows.filter((r) => !editing || r.booking_id !== booking.booking_id).forEach((r) => unavailable.add(r.room_id));
+          .lte("check_in_date", outD).gte("check_out_date", inD));
+        rows.filter((r) => !editing || r.booking_id !== booking.booking_id)
+          .filter((r) => stamp(r.check_in_date, r.check_in_time) < end && start < stamp(r.check_out_date, r.check_out_time))
+          .forEach((r) => unavailable.add(r.room_id));
       } catch (e) { console.warn("availability check failed", e); }
     }
     paintRooms();
@@ -138,51 +213,84 @@ export default async function bookingFormView({ el, params, query, navigate }) {
   }
 
   function updateSummary() {
-    const inD = form.check_in_date.value || v.check_in_date, outD = form.check_out_date.value || v.check_out_date;
-    const n = inD && outD && outD > inD ? nightsBetween(inD, outD) : 0;
+    const dayUse = isDayUse();
+    const inD = form.check_in_date.value || v.check_in_date;
+    const outD = dayUse ? inD : (form.check_out_date.value || v.check_out_date);
+    const n = !dayUse && inD && outD && outD > inD ? nightsBetween(inD, outD) : 0;
+    const hrs = dayUse ? hoursBetween(form.check_in_time.value, form.check_out_time.value) : 0;
     const room = rooms.find((r) => r.id === roomSelect.value);
     const total = Number(form.total_amount.value || 0), adv = Number(form.advance_paid.value || 0);
     $("#remaining").value = fmtMoney(Math.max(0, total - adv));
     $("#remaining").classList.toggle("warn", adv > total);
-    $("#rateHint").innerHTML = room && n
-      ? `Room rate ${fmtMoney(room.price)} × ${n} night${n > 1 ? "s" : ""} = <b>${fmtMoney(room.price * n)}</b> <button type="button" class="linkbtn" id="useRate">use this</button>`
-      : "";
+
+    let suggested = null, rateText = "";
+    if (room && dayUse && hrs > 0) {
+      suggested = Number(room.day_use_price || 0);
+      rateText = suggested > 0
+        ? `Day-use rate <b>${fmtMoney(suggested)}</b>`
+        : `No day-use rate is set for room ${room.room_number} yet — an admin can add one in Rooms.`;
+    } else if (room && n) {
+      suggested = Number(room.price || 0) * n;
+      rateText = `Room rate ${fmtMoney(room.price)} × ${n} night${n > 1 ? "s" : ""} = <b>${fmtMoney(suggested)}</b>`;
+    }
+    $("#rateHint").innerHTML = rateText + (suggested > 0 ? ` <button type="button" class="linkbtn" id="useRate">use this</button>` : "");
     const useRate = $("#useRate");
-    if (useRate) useRate.onclick = () => { form.total_amount.value = (room.price * n).toFixed(2); updateSummary(); };
-    render($("#staySummary"), n > 0
-      ? html`<div class="stay-pill">${icon("calendar")} <b>${n} night${n > 1 ? "s" : ""}</b> · ${fmtDate(inD)} → ${fmtDate(outD)}
-          ${room ? html` · Room <b>${room.room_number}</b> (${room.room_type})` : ""}
-          ${room && Number(form.guest_count.value || 0) > room.max_guests ? html`<span class="warn-text">${icon("alert")} above the room's ${room.max_guests}-guest capacity</span>` : ""}</div>`
-      : html`<div class="stay-pill warn-text">${icon("alert")} Check-out must be after check-in.</div>`);
+    if (useRate) useRate.onclick = () => { form.total_amount.value = suggested.toFixed(2); updateSummary(); };
+
+    const roomBit = room
+      ? html` · Room <b>${room.room_number}</b> (${room.room_type})`
+      : "";
+    const capBit = room && Number(form.guest_count.value || 0) > room.max_guests
+      ? html`<span class="warn-text">${icon("alert")} above the room's ${room.max_guests}-guest capacity</span>` : "";
+
+    let pill;
+    if (dayUse) {
+      pill = hrs > 0
+        ? html`<div class="stay-pill">${icon("clock")} <b>Day use · ${fmtHours(hrs)}</b> · ${fmtDate(inD)}, ${fmtTime(form.check_in_time.value)} → ${fmtTime(form.check_out_time.value)}${roomBit}${capBit}</div>`
+        : html`<div class="stay-pill warn-text">${icon("alert")} The departure time must be later than the arrival time.</div>`;
+    } else {
+      pill = n > 0
+        ? html`<div class="stay-pill">${icon("calendar")} <b>${n} night${n > 1 ? "s" : ""}</b> · ${fmtDate(inD)} → ${fmtDate(outD)}${roomBit}${capBit}</div>`
+        : html`<div class="stay-pill warn-text">${icon("alert")} Check-out must be after check-in.</div>`;
+    }
+    render($("#staySummary"), pill);
   }
 
   form.check_in_date.onchange = () => {
-    if (form.check_out_date.value <= form.check_in_date.value) form.check_out_date.value = addDays(form.check_in_date.value, 1);
+    if (isDayUse()) form.check_out_date.value = form.check_in_date.value;
+    else if (form.check_out_date.value <= form.check_in_date.value) form.check_out_date.value = addDays(form.check_in_date.value, 1);
     refreshAvailability();
   };
   form.check_out_date.onchange = refreshAvailability;
+  form.check_in_time.onchange = refreshAvailability;
+  form.check_out_time.onchange = refreshAvailability;
   form.room_type_filter.onchange = paintRooms;
   roomSelect.onchange = updateSummary;
   ["total_amount", "advance_paid", "guest_count"].forEach((n) => (form[n].oninput = updateSummary));
+
+  applyType();
   await refreshAvailability();
 
   function validate(f) {
+    const dayUse = isDayUse();
     const errors = [];
     if (!f.guest_name || f.guest_name.trim().length < 2) errors.push("Enter the guest's full name.");
     if (!EMAIL_RE.test(String(f.guest_email).trim())) errors.push("Enter a valid guest email address.");
     const guests = Number(f.guest_count);
     if (!Number.isInteger(guests) || guests < 1) errors.push("Number of guests must be at least 1.");
     if (!f.room_id) errors.push("Select a room.");
-    const inD = form.check_in_date.value, outD = form.check_out_date.value;
-    if (!inD || !outD) errors.push("Enter the check-in and check-out dates.");
-    else if (outD <= inD) errors.push("Check-out date must be after the check-in date.");
+    const inD = form.check_in_date.value, outD = dayUse ? inD : form.check_out_date.value;
+    if (!inD || !outD) errors.push(dayUse ? "Enter the date of the day-use booking." : "Enter the check-in and check-out dates.");
+    else if (dayUse) {
+      if (hoursBetween(f.check_in_time, f.check_out_time) <= 0) errors.push("For a day-use booking the departure time must be later than the arrival time.");
+    } else if (outD <= inD) errors.push("Check-out date must be after the check-in date.");
     const total = Number(f.total_amount || 0), adv = Number(f.advance_paid || 0);
     if (!(total >= 0)) errors.push("Enter a valid total amount.");
     if (adv < 0) errors.push("Advance paid cannot be negative.");
     if (adv > total) errors.push("Advance paid cannot be greater than the total amount.");
     if (unavailable.has(f.room_id)) {
       const r = rooms.find((x) => x.id === f.room_id);
-      errors.push(`Room ${r?.room_number ?? ""} is already booked for the selected dates.`);
+      errors.push(`Room ${r?.room_number ?? ""} is already booked for the selected dates and times.`);
     }
     return errors;
   }
@@ -192,7 +300,8 @@ export default async function bookingFormView({ el, params, query, navigate }) {
     const mode = e.submitter?.value || "save";
     const btn = e.submitter;
     const f = fields();
-    f.check_in_date = form.check_in_date.value; f.check_out_date = form.check_out_date.value;
+    f.check_in_date = form.check_in_date.value;
+    f.check_out_date = isDayUse() ? form.check_in_date.value : form.check_out_date.value;
     f.room_id = roomSelect.value;
     errBox.hidden = true;
 
@@ -220,8 +329,9 @@ export default async function bookingFormView({ el, params, query, navigate }) {
       id_passport: String(f.id_passport || "").trim() || null,
       room_id: f.room_id,
       room_number: room.room_number, room_type: room.room_type, // re-derived server-side
-      check_in_date: f.check_in_date, check_in_time: f.check_in_time || "14:00",
-      check_out_date: f.check_out_date, check_out_time: f.check_out_time || "10:00",
+      booking_type: bookingType,
+      check_in_date: f.check_in_date, check_in_time: f.check_in_time || (isDayUse() ? dayStart : "14:00"),
+      check_out_date: f.check_out_date, check_out_time: f.check_out_time || (isDayUse() ? dayEnd : "10:00"),
       total_amount: Number(f.total_amount || 0),
       advance_paid: Number(f.advance_paid || 0),
       payment_method: f.payment_method, booking_source: f.booking_source,

@@ -2,7 +2,7 @@
 import { sb, must, isAdmin } from "../api.js";
 import {
   html, render, icon, $, $$, fmtDate, fmtTime, fmtDateTime, fmtMoney, nightsBetween, statusBadge, emailBadge,
-  emptyState, toast, friendlyError,
+  emptyState, toast, friendlyError, isDayUse, dayUseTag, bookingTypeLabel,
 } from "../ui.js";
 import { can, runAction } from "./booking-actions.js";
 
@@ -17,6 +17,7 @@ export default async function bookingDetailView({ el, params, navigate }) {
     sb.from("profiles").select("id, full_name, email").then(must).catch(() => []),
   ]);
   const who = (id) => people.find((p) => p.id === id)?.full_name || (id ? "—" : "—");
+  const dayUse = isDayUse(b);
   const nights = nightsBetween(b.check_in_date, b.check_out_date);
 
   render(el, html`
@@ -24,8 +25,10 @@ export default async function bookingDetailView({ el, params, navigate }) {
       <div>
         <a class="back" href="#/bookings">${icon("back")} Back to bookings</a>
         <h1><span class="mono gold">${b.booking_id}</span></h1>
-        <p class="muted">${b.guest_name} · Room ${b.room_number} · ${fmtDate(b.check_in_date)} → ${fmtDate(b.check_out_date)}</p>
-        <div class="badge-row">${statusBadge(b.booking_status)} ${emailBadge(b.email_status)}
+        <p class="muted">${b.guest_name} · Room ${b.room_number} · ${dayUse
+          ? html`${fmtDate(b.check_in_date)}, ${fmtTime(b.check_in_time)} → ${fmtTime(b.check_out_time)}`
+          : html`${fmtDate(b.check_in_date)} → ${fmtDate(b.check_out_date)}`}</p>
+        <div class="badge-row">${statusBadge(b.booking_status)} ${dayUseTag(b)} ${emailBadge(b.email_status)}
           ${b.email_sent_at ? html`<span class="muted sm">last sent ${fmtDateTime(b.email_sent_at)}</span>` : ""}</div>
       </div>
       <div class="page-actions">
@@ -62,9 +65,14 @@ export default async function bookingDetailView({ el, params, navigate }) {
         <dl class="dl-list">
           ${line("Room number", b.room_number)}
           ${line("Room type", b.room_type)}
-          ${line("Nights", `${nights}`)}
-          ${line("Check-in", html`${fmtDate(b.check_in_date)}<small class="sub">${fmtTime(b.check_in_time)}</small>`)}
-          ${line("Check-out", html`${fmtDate(b.check_out_date)}<small class="sub">${fmtTime(b.check_out_time)}</small>`)}
+          ${line("Booking type", bookingTypeLabel(b.booking_type))}
+          ${dayUse ? "" : line("Nights", `${nights}`)}
+          ${dayUse
+            ? html`${line("Date", fmtDate(b.check_in_date))}
+                   ${line("Arrival", fmtTime(b.check_in_time))}
+                   ${line("Departure", fmtTime(b.check_out_time))}`
+            : html`${line("Check-in", html`${fmtDate(b.check_in_date)}<small class="sub">${fmtTime(b.check_in_time)}</small>`)}
+                   ${line("Check-out", html`${fmtDate(b.check_out_date)}<small class="sub">${fmtTime(b.check_out_time)}</small>`)}`}
           ${b.actual_check_in_at ? line("Checked in at", html`${fmtDateTime(b.actual_check_in_at)}<small class="sub">by ${who(b.checked_in_by)}</small>`) : ""}
           ${b.actual_check_out_at ? line("Checked out at", html`${fmtDateTime(b.actual_check_out_at)}<small class="sub">by ${who(b.checked_out_by)}</small>`) : ""}
         </dl>

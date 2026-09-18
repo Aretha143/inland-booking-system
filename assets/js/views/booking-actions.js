@@ -1,6 +1,6 @@
 // Shared booking actions (send/resend, check-in, check-out, cancel, delete) used by list, dashboard and detail views.
 import { sb, must, isAdmin, sendConfirmation } from "../api.js";
-import { html, icon, toast, confirmDialog, openModal, friendlyError, fmtMoney, fmtDate, raw, $$ } from "../ui.js";
+import { html, icon, toast, confirmDialog, openModal, friendlyError, fmtMoney, fmtDate, fmtTime, isDayUse, raw, $$ } from "../ui.js";
 
 export const refreshView = () => window.dispatchEvent(new Event("app:refresh"));
 
@@ -92,7 +92,9 @@ export async function doSend(b) {
 
 export async function doCheckIn(b) {
   const ok = await confirmDialog("Check in guest",
-    html`Check in <b>${b.guest_name}</b> to room <b>${b.room_number}</b>?<br><small class="muted">Booked ${fmtDate(b.check_in_date)} → ${fmtDate(b.check_out_date)}</small>`,
+    html`Check in <b>${b.guest_name}</b> to room <b>${b.room_number}</b>?<br><small class="muted">${isDayUse(b)
+      ? html`Day use · ${fmtDate(b.check_in_date)}, ${fmtTime(b.check_in_time)} → ${fmtTime(b.check_out_time)}`
+      : html`Booked ${fmtDate(b.check_in_date)} → ${fmtDate(b.check_out_date)}`}</small>`,
     { confirmText: "Check in" });
   if (!ok) return false;
   try {
@@ -127,7 +129,7 @@ export async function doCancel(b) {
     confirmText: "Cancel booking",
     cancelText: "Keep booking",
     danger: true,
-    body: html`<p class="modal-text">Cancel <b>${b.booking_id}</b> for <b>${b.guest_name}</b>? The room becomes available again for these dates.</p>
+    body: html`<p class="modal-text">Cancel <b>${b.booking_id}</b> for <b>${b.guest_name}</b>? The room becomes available again for ${isDayUse(b) ? "these hours" : "these dates"}.</p>
       <label class="field"><span>Reason (optional)</span><input name="reason" maxlength="500" placeholder="e.g. Guest cancelled by phone"></label>`,
     onConfirm: async (form) => {
       must(await sb.from("bookings").update({ booking_status: "CANCELLED", cancel_reason: form.reason.value.trim() || null })
