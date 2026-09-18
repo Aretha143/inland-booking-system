@@ -295,8 +295,10 @@ export default async function bookingFormView({ el, params, query, navigate }) {
     return errors;
   }
 
+  let submitting = false;
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (submitting) return; // a second submit must never create a second booking
     const mode = e.submitter?.value || "save";
     const btn = e.submitter;
     const f = fields();
@@ -339,6 +341,7 @@ export default async function bookingFormView({ el, params, query, navigate }) {
       internal_notes: String(f.internal_notes || "").trim() || null,
     };
 
+    submitting = true;
     setBusy(btn, true, mode === "send" ? "Saving…" : "Saving…");
     let saved;
     try {
@@ -346,6 +349,7 @@ export default async function bookingFormView({ el, params, query, navigate }) {
         ? must(await sb.from("bookings").update(payload).eq("id", params.id).select("*").single())
         : must(await sb.from("bookings").insert({ ...payload, booking_id: "", created_by: state.profile.id }).select("*").single());
     } catch (err) {
+      submitting = false;
       setBusy(btn, false);
       render(errBox, html`${friendlyError(err)}`);
       errBox.hidden = false;
