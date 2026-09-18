@@ -156,6 +156,7 @@ code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px
 .st-guests { background: rgba(127,169,216,.12); color: var(--info); }
 .st-out { background: rgba(224,177,77,.12); color: var(--warn); }
 .st-up { background: rgba(111,191,139,.1); color: var(--ok); }
+.stat-ic.st-day { background: rgba(200,162,216,.12); color: #C8A2D8; }
 
 /* ---------- tables ---------- */
 .table-wrap { overflow-x: auto; margin: 0 -18px; padding: 0 18px; }
@@ -184,6 +185,7 @@ code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px
 .rm-occupied { color: var(--info); border-color: rgba(127,169,216,.3); }
 .rm-maint { color: var(--warn); border-color: rgba(224,177,77,.3); }
 .rm-blocked { color: var(--err); border-color: rgba(224,104,95,.3); }
+.bt-day { color: #C8A2D8; border-color: rgba(200,162,216,.35); background: rgba(200,162,216,.1); }
 .role-admin { color: var(--gold-soft); border-color: rgba(201,164,92,.35); background: var(--gold-dim); }
 .role-staff { color: var(--muted); }
 .pill { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; padding: 5px 11px; border-radius: 20px; border: 1px solid var(--line-2); color: var(--muted); }
@@ -242,6 +244,17 @@ input[type="date"], input[type="time"] { color-scheme: dark; }
 .filter-row .field.sm { min-width: 150px; flex: 1; }
 .filter-row .field.sm select, .filter-row .field.sm input { padding: 8px 10px; font-size: 13px; }
 .select.sm { width: auto; padding: 7px 10px; font-size: 12.5px; }
+/* Booking-type toggle (Overnight Stay / Day Use) */
+.seg { display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 8px; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-sm); flex-wrap: wrap; }
+.seg-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid transparent; border-radius: calc(var(--radius-sm) - 3px); background: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.seg-btn .ic { width: 15px; height: 15px; }
+.seg-btn:hover:not(:disabled):not(.is-on) { color: var(--text); background: rgba(255,255,255,.03); }
+.seg-btn.is-on { color: var(--gold-soft); background: var(--gold-dim); border-color: rgba(201,164,92,.35); }
+.seg-btn:disabled { opacity: .5; cursor: not-allowed; }
+.seg-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.seg-hint { margin: 0 0 14px; font-size: 12px; color: var(--muted-2); max-width: 62ch; }
+@media (max-width: 480px) { .seg { display: flex; width: 100%; } .seg-btn { flex: 1; justify-content: center; padding: 8px 6px; } }
+
 .stay-summary { margin-top: 14px; }
 .stay-pill { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 9px 13px; font-size: 13px; color: var(--muted); }
 .stay-pill .ic { color: var(--gold); }
@@ -360,6 +373,10 @@ input[type="date"], input[type="time"] { color-scheme: dark; }
 .bar-in { background: var(--ok); color: #0C1A11; }
 .bar-out { background: #5A6B80; color: #E8EEF6; }
 .bar-cancelled { background: #3A3A42; color: #A9A49B; text-decoration: line-through; }
+/* a day-use bar sits on a single date, so it is drawn narrower and outlined */
+.cal-bar.bar-day { box-shadow: inset 0 0 0 2px rgba(20,20,15,.35); border-radius: 12px; }
+.lg.bar-day { background: none; color: #C8A2D8; }
+.lg.bar-day::before { background: #C8A2D8; border-radius: 9px; }
 
 /* ---------- print sheet ---------- */
 .print-toolbar { display: flex; justify-content: space-between; gap: 12px; padding: 16px 20px; max-width: 900px; margin: 0 auto; }
