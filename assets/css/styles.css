@@ -215,6 +215,8 @@ code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px
 .span-2 { grid-column: 1 / -1; }
 @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
 .field { display: flex; flex-direction: column; gap: 6px; }
+/* a display rule beats the default [hidden] rule, so restate it for every element that sets one */
+[hidden] { display: none !important; }
 .field > span { font-size: 12px; color: var(--muted); letter-spacing: .3px; }
 .field > span small { color: var(--muted-2); }
 .req { color: var(--gold); }
