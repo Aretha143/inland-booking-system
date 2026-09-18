@@ -140,6 +140,7 @@ export default async function bookingFormView({ el, params, query, navigate }) {
   const outDateField = $("#outDateField", el);
   const isDayUse = () => bookingType === "DAY_USE";
   let unavailable = new Set();
+  let availabilitySeq = 0; // guards against a slow earlier reply overwriting a newer one
 
   const fields = () => Object.fromEntries(new FormData(form).entries());
 
@@ -182,7 +183,8 @@ export default async function bookingFormView({ el, params, query, navigate }) {
   async function refreshAvailability() {
     const inD = form.check_in_date.value || v.check_in_date;
     const outD = isDayUse() ? inD : (form.check_out_date.value || v.check_out_date);
-    unavailable = new Set();
+    const seq = ++availabilitySeq;
+    const found = new Set();
     const start = stamp(inD, form.check_in_time.value), end = stamp(outD, form.check_out_time.value);
     if (inD && outD && end > start) {
       try {
@@ -192,13 +194,16 @@ export default async function bookingFormView({ el, params, query, navigate }) {
           .lte("check_in_date", outD).gte("check_out_date", inD));
         rows.filter((r) => !editing || r.booking_id !== booking.booking_id)
           .filter((r) => stamp(r.check_in_date, r.check_in_time) < end && start < stamp(r.check_out_date, r.check_out_time))
-          .forEach((r) => unavailable.add(r.room_id));
+          .forEach((r) => found.add(r.room_id));
       } catch (e) { console.warn("availability check failed", e); }
     }
+    if (seq !== availabilitySeq || !form.isConnected) return; // a newer check has already run
+    unavailable = found;
     paintRooms();
   }
 
   function paintRooms() {
+    if (!form.isConnected) return;
     const typeFilter = form.room_type_filter.value;
     const current = roomSelect.value || v.room_id || "";
     const list = rooms.filter((r) => !typeFilter || r.room_type === typeFilter);
@@ -213,6 +218,7 @@ export default async function bookingFormView({ el, params, query, navigate }) {
   }
 
   function updateSummary() {
+    if (!form.isConnected || !$("#remaining", el)) return; // the view may already have been replaced
     const dayUse = isDayUse();
     const inD = form.check_in_date.value || v.check_in_date;
     const outD = dayUse ? inD : (form.check_out_date.value || v.check_out_date);
@@ -220,8 +226,9 @@ export default async function bookingFormView({ el, params, query, navigate }) {
     const hrs = dayUse ? hoursBetween(form.check_in_time.value, form.check_out_time.value) : 0;
     const room = rooms.find((r) => r.id === roomSelect.value);
     const total = Number(form.total_amount.value || 0), adv = Number(form.advance_paid.value || 0);
-    $("#remaining").value = fmtMoney(Math.max(0, total - adv));
-    $("#remaining").classList.toggle("warn", adv > total);
+    const remaining = $("#remaining", el);
+    remaining.value = fmtMoney(Math.max(0, total - adv));
+    remaining.classList.toggle("warn", adv > total);
 
     let suggested = null, rateText = "";
     if (room && dayUse && hrs > 0) {
@@ -233,8 +240,8 @@ export default async function bookingFormView({ el, params, query, navigate }) {
       suggested = Number(room.price || 0) * n;
       rateText = `Room rate ${fmtMoney(room.price)} × ${n} night${n > 1 ? "s" : ""} = <b>${fmtMoney(suggested)}</b>`;
     }
-    $("#rateHint").innerHTML = rateText + (suggested > 0 ? ` <button type="button" class="linkbtn" id="useRate">use this</button>` : "");
-    const useRate = $("#useRate");
+    $("#rateHint", el).innerHTML = rateText + (suggested > 0 ? ` <button type="button" class="linkbtn" id="useRate">use this</button>` : "");
+    const useRate = $("#useRate", el);
     if (useRate) useRate.onclick = () => { form.total_amount.value = suggested.toFixed(2); updateSummary(); };
 
     const roomBit = room
@@ -253,7 +260,7 @@ export default async function bookingFormView({ el, params, query, navigate }) {
         ? html`<div class="stay-pill">${icon("calendar")} <b>${n} night${n > 1 ? "s" : ""}</b> · ${fmtDate(inD)} → ${fmtDate(outD)}${roomBit}${capBit}</div>`
         : html`<div class="stay-pill warn-text">${icon("alert")} Check-out must be after check-in.</div>`;
     }
-    render($("#staySummary"), pill);
+    render($("#staySummary", el), pill);
   }
 
   form.check_in_date.onchange = () => {
@@ -288,10 +295,8 @@ export default async function bookingFormView({ el, params, query, navigate }) {
     if (!(total >= 0)) errors.push("Enter a valid total amount.");
     if (adv < 0) errors.push("Advance paid cannot be negative.");
     if (adv > total) errors.push("Advance paid cannot be greater than the total amount.");
-    if (unavailable.has(f.room_id)) {
-      const r = rooms.find((x) => x.id === f.room_id);
-      errors.push(`Room ${r?.room_number ?? ""} is already booked for the selected dates and times.`);
-    }
+    // Availability is NOT re-checked here: the room list already greys out busy rooms, and the
+    // database is the only authority on clashes — it rejects the insert with an exact message.
     return errors;
   }
 
