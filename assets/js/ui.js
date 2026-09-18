@@ -65,6 +65,10 @@ export const statusBadge = (s) => html`<span class="badge ${STATUS_CLASS[s] || "
 export const emailBadge = (s) => html`<span class="badge ${EMAIL_CLASS[s] || ""}"><i></i>${EMAIL_LABEL[s] || s}</span>`;
 export const roomBadge = (s) => html`<span class="badge ${ROOM_CLASS[s] || ""}"><i></i>${s ? s[0] + s.slice(1).toLowerCase() : ""}</span>`;
 export const statusLabel = (s) => STATUS_LABEL[s] || s;
+export const isDayUse = (b) => b?.booking_type === "DAY_USE";
+export const bookingTypeLabel = (t) => (t === "DAY_USE" ? "Day Use (Daycation)" : "Overnight Stay");
+/** Small marker shown next to a booking so day-use bookings are never mistaken for overnight stays. */
+export const dayUseTag = (b) => (isDayUse(b) ? html`<span class="badge bt-day"><i></i>Day use</span>` : "");
 
 // ---------- icons (inline SVG, no external dependency) ----------
 const ICONS = {
@@ -98,6 +102,7 @@ const ICONS = {
   close: '<path d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z"/>',
   link: '<path d="M3.9 12a3.1 3.1 0 0 1 3.1-3.1h4V7H7a5 5 0 0 0 0 10h4v-1.9H7A3.1 3.1 0 0 1 3.9 12zM8 13h8v-2H8zm9-6h-4v1.9h4a3.1 3.1 0 0 1 0 6.2h-4V17h4a5 5 0 0 0 0-10z"/>',
   refresh: '<path d="M17.7 6.3A8 8 0 1 0 19.7 14h-2.1a6 6 0 1 1-1.4-6.2L13 11h7V4z"/>',
+  clock: '<path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8zm.5-13H11v6l5.2 3.1.8-1.3-4.5-2.6z"/>',
 };
 export const icon = (name, cls = "") => raw(`<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${ICONS[name] || ""}</svg>`);
 

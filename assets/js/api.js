@@ -76,4 +76,4 @@ export const sendConfirmation = (bookingId) => callFunction("send-booking-confir
 export const pgLike = (q) => `%${String(q).replace(/[%_\\]/g, (c) => "\\" + c).replace(/[,()"]/g, " ").trim()}%`;
 
 export const BOOKING_LIST_COLUMNS =
-  "id, booking_id, guest_name, guest_email, phone, guest_count, room_id, room_number, room_type, check_in_date, check_in_time, check_out_date, check_out_time, total_amount, advance_paid, remaining_amount, booking_source, booking_status, email_status, email_sent_at, created_at";
+  "id, booking_id, guest_name, guest_email, phone, guest_count, room_id, room_number, room_type, booking_type, check_in_date, check_in_time, check_out_date, check_out_time, total_amount, advance_paid, remaining_amount, booking_source, booking_status, email_status, email_sent_at, created_at";
